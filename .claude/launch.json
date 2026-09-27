@@ -2,9 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "robotics-frontend",
+      "name": "design-2",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--host"],
+      "runtimeArgs": ["--prefix", "v1-design-2/viewer", "run", "dev"],
+      "port": 5174
+    },
+    {
+      "name": "design-1",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "v1-design-1/viewer", "run", "dev"],
       "port": 5173
     }
   ]
