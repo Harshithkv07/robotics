@@ -132,5 +132,6 @@ live maths) and changes the presentation:
   low-speed yard manoeuvre, which is the stated scope.
 * **Aisles are generous** (34 m cross, 40 m angled, 32 m parallel). Tighter yards need gentler manoeuvres than the planner can
   currently certify.
-* **Base paper.** The 2026 arXiv paper named in the literature review (Hybrid A* + NMPC parking assistance) has not been read in full;
-  only its title and one-line summary from the slides were used. Check the novelty claim against the paper itself.
+* **Base paper.** G. Alenchery et al., "Parking Assistance for Trailer-Truck Transport Vehicles Using Sensor Fusion and Motion
+  Planning", arXiv:2605.02716 (2026). It proposes sensor fusion -> Hybrid A* -> NMPC -> LQR but implements only A* with B-spline
+  smoothing; the NMPC was never built and jackknifing was observed. This project builds and measures that NMPC layer.
