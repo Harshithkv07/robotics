@@ -4,3 +4,7 @@ __pycache__/
 node_modules/
 dist/
 .vite/
+
+# first-review source documents: kept on this machine only (the old deck embeds a third-party video)
+doc/Robotics SEM3.pptx
+doc/New Microsoft Word Document.docx
