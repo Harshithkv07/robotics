@@ -2,11 +2,30 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "v2",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "v2/viewer",
+        "run",
+        "dev"
+      ],
+      "port": 5175
+    },
+    {
+      "name": "v2-demo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "v2/server.py"
+      ],
+      "port": 4175
+    },
+    {
       "name": "design-2",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--prefix",
-        "v1-design-2/viewer",
+        "v1/v1-design-2/viewer",
         "run",
         "dev"
       ],
@@ -20,7 +39,7 @@
         "http.server",
         "4174",
         "--directory",
-        "v1-design-2/viewer/dist"
+        "v1/v1-design-2/viewer/dist"
       ],
       "port": 4174
     },
@@ -29,7 +48,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--prefix",
-        "v1-design-1/viewer",
+        "v1/v1-design-1/viewer",
         "run",
         "dev"
       ],
