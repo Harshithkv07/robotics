@@ -50,7 +50,7 @@ function Camera({ bounds, focus, view, onScale, angle = null, padLeft = 0 }) {
     cam.updateMatrixWorld()
     let zoom
     if (focus) {
-      zoom = Math.min(size.width / 64, size.height / 40)
+      zoom = Math.min(size.width / 44, size.height / 28)        // following the rig: close enough to read the vehicles
     } else {
       // fit the lot's corners (on the ground and at truck height) in view space, then centre them
       const inv = cam.matrixWorldInverse

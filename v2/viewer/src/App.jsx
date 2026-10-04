@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Yard from './scene/Yard'
 import usePlayback from './usePlayback'
-import TopBar from './ui/TopBar'
 import { SelectBand, SelectLegend, GuidanceBand, UnaidedBand } from './ui/Instruction'
-import Procedure from './ui/Procedure'
-import Report from './ui/Report'
 import { HitchPanel, InputsPanel } from './ui/Instruments'
 import ModelPanel from './ui/ModelPanel'
 import About from './ui/About'
@@ -14,9 +11,9 @@ import { I } from './ui/icons'
 import {
   loadManifest, loadLot, sampleFrames, stepIndexAt, horizonAt, fmt,
   detectLive, createLot, pollLot, fetchPlan, mergeLot, draftLot, occupiedIds, liveProgress, randomOccupancy, sameIds,
-  previewLot, specOf, sameSpec, lockTurns,
+  previewLot, specOf, sameSpec, lockTurns, certifyFraction,
 } from './data'
-import { layoutShort, prediction, history, termScale } from './derive'
+import { prediction, history, termScale } from './derive'
 
 const DEFAULT_SPEED = 1 // real time; the library is precomputed at realistic yard speeds
 const POLL_MS = 500
@@ -50,7 +47,6 @@ export default function App() {
   const [baseline, setBaselineState] = useState(false)
   const [view, setView] = useState('tilt')
   const [follow, setFollow] = useState(true)
-  const [railTab, setRailTab] = useState('steps')
   // version 2: the live solver (server.py)
   const [live, setLive] = useState(null)            // {version, workers} while the server answers, else null
   const [liveLot, setLiveLot] = useState(null)      // {id, lot, done, elapsed}: a lot being / been solved live
@@ -135,9 +131,8 @@ export default function App() {
   const pick = useCallback((id) => {
     const b = shownRef.current?.layout.bays[id]
     if (b && (b.status === 'pending' || b.status === 'solving' || b.status === 'deepening')) { setWaitFor(id); return }   // start it once certified
-    setWaitFor(null); setSelected(id); setMode('guide'); setBaselineState(false); setRailTab('steps'); setHovered(null); pb.restart()
+    setWaitFor(null); setSelected(id); setMode('guide'); setBaselineState(false); setHovered(null); pb.restart()
   }, [pb.restart]) // eslint-disable-line react-hooks/exhaustive-deps
-  const backToLot = () => { setMode('select'); setSelected(null); setBaselineState(false); pb.seek(0) }
   const setBaseline = (b) => { if (b !== baseline) { setBaselineState(b); pb.restart() } }
   const nSeeds = entry?.seeds.length || 1
   const stepSeed = (d) => {
@@ -156,7 +151,6 @@ export default function App() {
       wantSetup.current = true; setLayoutName(name); setSeedIdx(0)
     }
   }
-  const goHome = () => { toLibrary(); setScreen('home') }
 
   // ---- version 2: live lots ----
   const startLive = async (spec) => {
@@ -212,6 +206,14 @@ export default function App() {
   // poll the live lot until every free bay has a verdict, fetching each certified plan once
   const liveRef = useRef(liveLot)
   liveRef.current = liveLot
+  // when each bay of the live lot entered its current state (lot seconds), for the progress bar
+  const since = useRef({ id: null, bays: {} })
+  useEffect(() => {
+    if (!liveLot) return
+    if (since.current.id !== liveLot.id) since.current = { id: liveLot.id, bays: {} }
+    const m = since.current.bays
+    for (const b of liveLot.lot.layout.bays) if (m[b.id]?.[0] !== b.status) m[b.id] = [b.status, liveLot.elapsed]
+  }, [liveLot])
   useEffect(() => {
     if (!liveLot || liveLot.done) return
     const id = liveLot.id
@@ -299,8 +301,8 @@ export default function App() {
     return { ok, free: fr, fills, layouts: manifest.layouts.length }
   }, [manifest])
   const layoutStats = entry ? entry.seeds.reduce((a, s) => ({ ok: a.ok + s.ok, free: a.free + s.free }), { ok: 0, free: 0 }) : null
-  const progress = liveLot ? { ...liveProgress(liveLot.lot), done: liveLot.done, elapsed: liveLot.elapsed, lost: !!liveLot.lost } : null
-  const lotName = liveLot ? `live lot ${liveLot.lot.layout.seed}` : `fill ${seedIdx % nSeeds + 1}`
+  const progress = liveLot ? { ...liveProgress(liveLot.lot), done: liveLot.done, elapsed: liveLot.elapsed, lost: !!liveLot.lost,
+    frac: liveLot.done ? 1 : certifyFraction(liveLot.lot, since.current.id === liveLot.id ? since.current.bays : {}, liveLot.elapsed) } : null
   const noBar = !guide && !editing && !!liveLot          // a solved live lot has no status footer
 
   if (error) {
@@ -325,32 +327,13 @@ export default function App() {
 
   return (
     <div className={`app ${guide ? 'is-guide' : 'is-select'} ${noBar ? 'no-bar' : ''}`}>
-      <TopBar onHome={goHome} manifest={manifest} layoutName={layoutName} live={live} />
-
       <main className="work">
-        {guide && (
-          <aside className="rail" aria-label="Procedure and report">
-            <header className="rail-h">
-              <div><h2>Bay {selected + 1}</h2><p>{layoutShort(entry || shown.layout)} &middot; {lotName}</p></div>
-              <button className="btn sm" onClick={backToLot} title="Back to bay selection">{I.chevL}Change bay</button>
-            </header>
-            <div className="seg rail-tabs" role="group" aria-label="Rail view">
-              <button aria-pressed={railTab === 'steps'} onClick={() => setRailTab('steps')}>Procedure</button>
-              <button aria-pressed={railTab === 'report'} onClick={() => setRailTab('report')}>Run report</button>
-            </div>
-            {railTab === 'steps'
-              ? (baseline
-                ? <div className="scroll"><p className="empty">The unaided driver has no plan and no instructions. Switch back to <b>Guided</b> for the procedure, or open the <b>Run report</b> for the comparison.</p></div>
-                : <Procedure steps={plan.steps} t={pb.t} onSeek={pb.seek} lock={lock} />)
-              : <Report plan={plan} vehicle={shown.vehicle} />}
-          </aside>
-        )}
 
         <section className="center">
           {guide
             ? (baseline
-              ? <UnaidedBand plan={plan} t={pb.t} frame={frame} baseline={baseline} setBaseline={setBaseline} onReport={() => setRailTab('report')} />
-              : <GuidanceBand steps={steps} t={pb.t} duration={plan.duration} plan={plan} baseline={baseline} setBaseline={setBaseline} onReport={() => setRailTab('report')} lock={lock} />)
+              ? <UnaidedBand plan={plan} t={pb.t} frame={frame} baseline={baseline} setBaseline={setBaseline} />
+              : <GuidanceBand steps={steps} t={pb.t} duration={plan.duration} plan={plan} baseline={baseline} setBaseline={setBaseline} lock={lock} />)
             : <SelectBand okCount={okCount} free={free} live={live} progress={progress} editing={!!editing} parked={bays.length - free}
                 changed={changed} dirty={dirty} busy={busy} waitFor={waitFor} onRandom={newRandomLot} onEdit={startEdit}
                 onRandomFill={randomFill} onReset={resetFill} onContinue={continueSetup} />}

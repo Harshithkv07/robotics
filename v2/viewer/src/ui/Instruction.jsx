@@ -60,11 +60,24 @@ export function SelectBand({ okCount, free, live, progress, editing, parked, cha
       : <>Click bays to make them free or filled (<b>{parked}</b> filled, <b>{free}</b> free) and set the vehicle. Then continue to choose where to park.</>
   } else if (solving) {
     title = <>Certifying bays&hellip; <span className="tnum">{progress.decided} of {progress.free}</span></>
-    note = waitFor != null
-      ? <>Bay {waitFor + 1} is still being solved. Its guidance starts the moment it is certified.</>
-      : progress.deepening
-        ? <>{progress.deepening === 1 ? 'One bay' : `${progress.deepening} bays`} did not certify at the first attempt and {progress.deepening === 1 ? 'is' : 'are'} being tried again, the way a driver would: another route, or pulling forward and parking again.</>
-        : <>Each free bay is planned, driven by the NMPC and checked, in parallel on this laptop.</>
+    const pct = Math.floor(progress.frac * 100)
+    const counts = [[progress.ok, 'certified'], [progress.failed, 'not certified'], [progress.solving, 'being solved'],
+      [progress.deepening, 'being retried'], [progress.pending, 'queued']].filter(([k]) => k > 0)
+    note = (
+      <>
+        <span className="cert" role="progressbar" aria-label="Certification progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+          <span className="cert-bar"><i style={{ transform: `scaleX(${progress.frac})` }} /></span>
+          <b className="tnum">{pct}%</b>
+          <span className="tnum">{fmt(progress.elapsed, 0)} s</span>
+        </span>
+        <span className="cert-counts">{counts.map(([k, w], i) => <span key={w}>{i ? ' · ' : ''}<b className="tnum">{k}</b> {w}</span>)}</span>
+        {waitFor != null
+          ? <> Bay {waitFor + 1} starts the moment it is certified.</>
+          : progress.deepening
+            ? <> Retried = tried again the way a driver would: another route, or pulling forward and parking again.</>
+            : null}
+      </>
+    )
   } else {
     title = 'Choose a bay'
     note = progress?.lost
@@ -97,7 +110,7 @@ export function SelectLegend({ editing, solving }) {
   )
 }
 
-export function GuidanceBand({ steps, t, duration, plan, baseline, setBaseline, onReport, lock }) {
+export function GuidanceBand({ steps, t, duration, plan, baseline, setBaseline, lock }) {
   const idx = stepIndexAt(steps, t)
   const cur = steps[idx]
   const next = steps[idx + 1]
@@ -111,8 +124,6 @@ export function GuidanceBand({ steps, t, duration, plan, baseline, setBaseline, 
       <Gear g={g} />
       <div className="band-body">
         <div className="band-meta">
-          <span>Step <b className="tnum">{idx + 1}</b> of {steps.length}</span>
-          <span className="tnum">{fmt(cur.t0, 0)}–{fmt(cur.t1, 0)} s</span>
           <ModeSwitch baseline={baseline} setBaseline={setBaseline} />
         </div>
         <h2>{done ? 'Parked. Guidance complete.' : cur.label}</h2>
@@ -126,8 +137,7 @@ export function GuidanceBand({ steps, t, duration, plan, baseline, setBaseline, 
             </div>
           ) : done ? (
             <p className="band-note">
-              Set the parking brake. Final pose: <b className="tnum">{fmt(Math.abs(f.lat), 2)} m</b> off-centre, <b className="tnum">{fmt(Math.abs(f.hdg), 1)}°</b> heading, <b className="tnum">{fmt(Math.abs(f.psi), 1)}°</b> hitch.{' '}
-              <button className="link" onClick={onReport}>Open run report</button>
+              Set the parking brake. Final pose: <b className="tnum">{fmt(Math.abs(f.lat), 2)} m</b> off-centre, <b className="tnum">{fmt(Math.abs(f.hdg), 1)}°</b> heading, <b className="tnum">{fmt(Math.abs(f.psi), 1)}°</b> hitch.
             </p>
           ) : (
             <p className="band-note">Come to a full stop{cur.engage ? <>, then select <b>{cur.engage < 0 ? 'Reverse' : 'Drive'}</b></> : ''}.</p>
@@ -145,7 +155,7 @@ export function GuidanceBand({ steps, t, duration, plan, baseline, setBaseline, 
   )
 }
 
-export function UnaidedBand({ plan, t, frame, baseline, setBaseline, onReport }) {
+export function UnaidedBand({ plan, t, frame, baseline, setBaseline }) {
   const b = plan.baseline
   const over = b.jackknife && t >= b.duration - 0.3
   const g = over ? '!' : Math.abs(frame[5]) < 0.04 ? 'N' : frame[5] < 0 ? 'R' : 'D'
@@ -164,8 +174,7 @@ export function UnaidedBand({ plan, t, frame, baseline, setBaseline, onReport })
             A tractor-only path follower: no hitch model, no look-ahead, no hitch-angle limit.{' '}
             {b.jackknife
               ? <>The hitch angle runs away and the rig folds after <b className="tnum">{fmt(b.t_jack, 0)} s</b> (peak <b className="tnum">{fmt(b.max_psi_deg, 0)}°</b>).</>
-              : <>Driving forward is self-stabilising, so it parks here too.</>}{' '}
-            <button className="link" onClick={onReport}>Compare in run report</button>
+              : <>Driving forward is self-stabilising, so it parks here too.</>}
           </p>
         </div>
       </div>

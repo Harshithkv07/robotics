@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { advanceClock } from './clock.js'
 import { frameIndexAt, sampleFrames, stepIndexAt, horizonAt, kinematics, turnsOf, sideOf, DEG, mergeLot, draftLot, rigLength, liveProgress, occupiedIds, randomOccupancy, sameIds,
-  specOf, sameSpec, vehicleOf, setParam, lockTurns, turnsText } from './data.js'
+  specOf, sameSpec, vehicleOf, setParam, lockTurns, turnsText, certifyFraction } from './data.js'
 
 const steps = [
   { id: 0, t0: 0.1, t1: 10 }, { id: 1, t0: 10, t1: 20 }, { id: 2, t0: 20, t1: 22 }, { id: 3, t0: 22, t1: 40 },
@@ -137,7 +137,7 @@ test('mergeLot applies verdicts, keeps unchanged bays, and only certifies a bay 
   assert.equal(b.layout.bays[1].status, 'ok')
   assert.deepEqual(b.plans['1'], { duration: 50 })
   assert.equal(b.layout.bays[2].reason, 'guidance not certified (clearance)')
-  assert.deepEqual(liveProgress(b), { free: 2, decided: 2, ok: 1, deepening: 0 })
+  assert.deepEqual(liveProgress(b), { free: 2, decided: 2, ok: 1, failed: 1, solving: 0, pending: 0, deepening: 0 })
   const c = mergeLot(b, [{ id: 1, status: 'ok', s: 9.1 }, { id: 2, status: 'infeasible', reason: 'guidance not certified (clearance)' }])
   assert.equal(c.layout.bays[2], b.layout.bays[2], 'no change, same object: nothing re-renders')
   assert.equal(lot.layout.bays[1].status, 'pending', 'input lot untouched')
@@ -214,11 +214,34 @@ test('a bay being retried is neither certified nor decided, and keeps its place 
   const second = mergeLot(lot, [{ id: 1, status: 'deepening' }, { id: 2, status: 'ok' }], { 2: { duration: 9 } })
   assert.equal(second.layout.bays[1].status, 'deepening')
   assert.equal(second.layout.bays[2].status, 'ok')
-  assert.deepEqual(liveProgress(second), { free: 2, decided: 1, ok: 1, deepening: 1 })
+  assert.deepEqual(liveProgress(second), { free: 2, decided: 1, ok: 1, failed: 0, solving: 0, pending: 0, deepening: 1 })
   const later = mergeLot(second, [{ id: 1, status: 'ok' }], { 1: { duration: 30 } })    // certified by the second attempt
   assert.equal(later.layout.bays[1].status, 'ok')
-  assert.deepEqual(liveProgress(later), { free: 2, decided: 2, ok: 2, deepening: 0 })
+  assert.deepEqual(liveProgress(later), { free: 2, decided: 2, ok: 2, failed: 0, solving: 0, pending: 0, deepening: 0 })
   const failed = mergeLot(second, [{ id: 1, status: 'infeasible', reason: 'guidance not certified (clearance, after 6 attempts)' }])
   assert.equal(failed.layout.bays[1].status, 'infeasible')
   assert.equal(failed.layout.bays[1].reason, 'guidance not certified (clearance, after 6 attempts)')
+})
+
+test('certification progress grows with time and verdicts, never runs backwards, and only verdicts reach 100 %', () => {
+  const lot = (statuses) => ({ layout: { bays: [{ id: 0, status: 'occupied' }, ...statuses.map((status, i) => ({ id: i + 1, status }))] } })
+  // one bay through every state: queued, solving, retried, certified; a second bay certified early
+  const path = [
+    [['pending', 'solving'], { 1: ['pending', 0], 2: ['solving', 0] }, 0],
+    [['solving', 'solving'], { 1: ['solving', 2], 2: ['solving', 0] }, 10],
+    [['solving', 'ok'], { 1: ['solving', 2], 2: ['ok', 12] }, 20],
+    [['deepening', 'ok'], { 1: ['deepening', 25], 2: ['ok', 12] }, 25],
+    [['deepening', 'ok'], { 1: ['deepening', 25], 2: ['ok', 12] }, 200],
+    [['ok', 'ok'], { 1: ['ok', 260], 2: ['ok', 12] }, 260],
+  ]
+  let last = -1
+  for (const [st, since, t] of path) {
+    const f = certifyFraction(lot(st), since, t)
+    assert.ok(f >= last - 1e-12 && f >= 0 && f <= 1, `${st} at ${t} s: ${f} after ${last}`)
+    if (st.some((s) => s !== 'ok' && s !== 'infeasible')) assert.ok(f < 1)
+    last = f
+  }
+  assert.equal(last, 1)
+  assert.equal(certifyFraction(lot(['pending', 'pending']), {}, 30), 0)
+  assert.equal(certifyFraction(lot(['ok', 'infeasible']), {}, 30), 1)
 })

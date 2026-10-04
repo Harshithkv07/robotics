@@ -132,12 +132,31 @@ export function randomOccupancy(lot, rnd = Math.random) {
   return ids.slice(0, filled).sort((a, b) => a - b)
 }
 
-// Progress of a live lot: bays with a verdict / free bays
+// Progress of a live lot: bays with a verdict / free bays, and how many free bays are in each state
 export function liveProgress(lot) {
   const free = lot.layout.bays.filter((b) => b.status !== 'occupied')
-  const decided = free.filter((b) => b.status === 'ok' || b.status === 'infeasible')
-  return { free: free.length, decided: decided.length, ok: free.filter((b) => b.status === 'ok').length,
-    deepening: free.filter((b) => b.status === 'deepening').length }
+  const n = (s) => free.filter((b) => b.status === s).length
+  return { free: free.length, decided: n('ok') + n('infeasible'), ok: n('ok'), failed: n('infeasible'),
+    solving: n('solving'), pending: n('pending'), deepening: n('deepening') }
+}
+
+// How far a lot being certified has got, 0-1, for the progress bar. A bay with a verdict counts 1. The solver cannot
+// say how far into a bay it is, so a bay being solved earns up to half of its share as time passes (most first
+// attempts take 5-25 s), and a bay being retried creeps on from half (retries take about a minute). It never runs
+// backwards and only a verdict completes a bay. `since`: {bayId: [status, lot elapsed s when the bay entered it]}.
+export const SOLVE_S = 15, RETRY_S = 60
+export function certifyFraction(lot, since, elapsed) {
+  const free = lot.layout.bays.filter((b) => b.status !== 'occupied')
+  if (!free.length) return 1
+  let sum = 0
+  for (const b of free) {
+    const s = since[b.id]
+    const dt = s && s[0] === b.status ? Math.max(0, elapsed - s[1]) : 0
+    if (b.status === 'ok' || b.status === 'infeasible') sum += 1
+    else if (b.status === 'solving') sum += 0.5 * (1 - Math.exp(-dt / SOLVE_S))
+    else if (b.status === 'deepening') sum += 0.5 + 0.45 * (1 - Math.exp(-dt / RETRY_S))
+  }
+  return sum / free.length
 }
 
 export const DEG = 180 / Math.PI
